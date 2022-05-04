@@ -116,6 +116,7 @@ typedef struct {
     uint32_t identifier;                /**< 11 or 29 bit identifier */
     uint8_t data_length_code;           /**< Data length code */
     uint8_t data[TWAI_FRAME_MAX_DLC];    /**< Data bytes (not relevant in RTR frame) */
+    int64_t timestamp;                  /**< Timestamp (in system clock microseconds) */
 } twai_message_t;
 
 /**

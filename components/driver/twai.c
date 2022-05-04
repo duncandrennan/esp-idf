@@ -23,6 +23,7 @@
 #include "soc/twai_periph.h"
 #include "hal/twai_hal.h"
 #include "esp_rom_gpio.h"
+#include "esp_timer.h"
 
 /* ---------------------------- Definitions --------------------------------- */
 //Internal Macros
@@ -125,10 +126,11 @@ static inline void twai_handle_rx_buffer_frames(BaseType_t *task_woken, int *ale
     uint32_t msg_count = twai_hal_get_rx_msg_count(&twai_context);
 
     for (uint32_t i = 0; i < msg_count; i++) {
-        twai_hal_frame_t frame;
-        if (twai_hal_read_rx_buffer_and_clear(&twai_context, &frame)) {
+        twai_hal_rx_frame_t rx_frame;
+        rx_frame.timestamp = esp_timer_get_time();
+        if (twai_hal_read_rx_buffer_and_clear(&twai_context, &rx_frame.frame)) {
             //Valid frame copied from RX buffer
-            if (xQueueSendFromISR(p_twai_obj->rx_queue, &frame, task_woken) == pdTRUE) {
+            if (xQueueSendFromISR(p_twai_obj->rx_queue, &rx_frame, task_woken) == pdTRUE) {
                 p_twai_obj->rx_msg_count++;
                 twai_alert_handler(TWAI_ALERT_RX_DATA, alert_req);
             } else {    //Failed to send to queue
@@ -145,10 +147,11 @@ static inline void twai_handle_rx_buffer_frames(BaseType_t *task_woken, int *ale
     bool overrun = false;
     //Clear all valid RX frames
     for (int i = 0; i < msg_count; i++) {
-        twai_hal_frame_t frame;
-        if (twai_hal_read_rx_buffer_and_clear(&twai_context, &frame)) {
+        twai_hal_rx_frame_t rx_frame;
+        rx_frame.timestamp = esp_timer_get_time();
+        if (twai_hal_read_rx_buffer_and_clear(&twai_context, &rx_frame.frame)) {
             //Valid frame copied from RX buffer
-            if (xQueueSendFromISR(p_twai_obj->rx_queue, &frame, task_woken) == pdTRUE) {
+            if (xQueueSendFromISR(p_twai_obj->rx_queue, &rx_frame, task_woken) == pdTRUE) {
                 p_twai_obj->rx_msg_count++;
                 twai_alert_handler(TWAI_ALERT_RX_DATA, alert_req);
             } else {
@@ -351,7 +354,7 @@ static twai_obj_t *twai_alloc_driver_obj(uint32_t tx_queue_len, uint32_t rx_queu
             goto cleanup;
         }
     }
-    p_obj->rx_queue_buff = heap_caps_calloc(rx_queue_len, sizeof(twai_hal_frame_t), TWAI_MALLOC_CAPS);
+    p_obj->rx_queue_buff = heap_caps_calloc(rx_queue_len, sizeof(twai_hal_rx_frame_t), TWAI_MALLOC_CAPS);
     p_obj->rx_queue_struct = heap_caps_calloc(1, sizeof(StaticQueue_t), TWAI_MALLOC_CAPS);
     p_obj->semphr_struct = heap_caps_calloc(1, sizeof(StaticSemaphore_t), TWAI_MALLOC_CAPS);
     if (p_obj->rx_queue_buff == NULL || p_obj->rx_queue_struct == NULL || p_obj->semphr_struct == NULL) {
@@ -364,7 +367,7 @@ static twai_obj_t *twai_alloc_driver_obj(uint32_t tx_queue_len, uint32_t rx_queu
             goto cleanup;
         }
     }
-    p_obj->rx_queue = xQueueCreateStatic(rx_queue_len, sizeof(twai_hal_frame_t), p_obj->rx_queue_buff, p_obj->rx_queue_struct);
+    p_obj->rx_queue = xQueueCreateStatic(rx_queue_len, sizeof(twai_hal_rx_frame_t), p_obj->rx_queue_buff, p_obj->rx_queue_struct);
     p_obj->alert_semphr = xSemaphoreCreateBinaryStatic(p_obj->semphr_struct);
     if (p_obj->rx_queue == NULL || p_obj->alert_semphr == NULL) {
         goto cleanup;
@@ -373,7 +376,7 @@ static twai_obj_t *twai_alloc_driver_obj(uint32_t tx_queue_len, uint32_t rx_queu
     if (tx_queue_len > 0) {
         p_obj->tx_queue = xQueueCreate(tx_queue_len, sizeof(twai_hal_frame_t));
     }
-    p_obj->rx_queue = xQueueCreate(rx_queue_len, sizeof(twai_hal_frame_t));
+    p_obj->rx_queue = xQueueCreate(rx_queue_len, sizeof(twai_hal_rx_frame_t));
     p_obj->alert_semphr = xSemaphoreCreateBinary();
     if ((tx_queue_len > 0 && p_obj->tx_queue == NULL) || p_obj->rx_queue == NULL || p_obj->alert_semphr == NULL) {
         goto cleanup;
@@ -591,7 +594,7 @@ esp_err_t twai_receive(twai_message_t *message, TickType_t ticks_to_wait)
     TWAI_CHECK(message != NULL, ESP_ERR_INVALID_ARG);
 
     //Get frame from RX Queue or RX Buffer
-    twai_hal_frame_t rx_frame;
+    twai_hal_rx_frame_t rx_frame;
     if (xQueueReceive(p_twai_obj->rx_queue, &rx_frame, ticks_to_wait) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
     }
@@ -601,7 +604,8 @@ esp_err_t twai_receive(twai_message_t *message, TickType_t ticks_to_wait)
     TWAI_EXIT_CRITICAL();
 
     //Decode frame
-    twai_hal_parse_frame(&rx_frame, message);
+    twai_hal_parse_frame(&rx_frame.frame, message);
+    message->timestamp = rx_frame.timestamp;
     return ESP_OK;
 }
 

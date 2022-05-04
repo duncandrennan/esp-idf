@@ -63,6 +63,10 @@ extern "C" {
 #endif
 
 typedef twai_ll_frame_buffer_t twai_hal_frame_t;
+typedef struct {
+    twai_hal_frame_t frame;
+    int64_t timestamp;
+} twai_hal_rx_frame_t;
 
 typedef struct {
     twai_dev_t *dev;
