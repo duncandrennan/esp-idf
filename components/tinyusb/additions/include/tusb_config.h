@@ -28,7 +28,9 @@
 
 #include "tusb_option.h"
 #include "sdkconfig.h"
-
+#define CONFIG_TINYUSB_HID_ENABLED 1
+#define CONFIG_TINYUSB_HID_BUFSIZE 64
+#define CONFIG_TINYUSB_DESC_HID_STRING "TinyUSB HID"
 #ifdef __cplusplus
 extern "C" {
 #endif
