@@ -360,6 +360,69 @@ void adc_hal_digi_start(adc_hal_context_t *hal, uint8_t *data_buf)
     adc_ll_digi_trigger_enable(hal->dev);
 }
 
+void adc_hal_digi_start_stop_phase(adc_hal_context_t *hal, uint8_t *data_buf)//MB
+{
+    //stop peripheral and DMA
+    adc_hal_digi_stop(hal);
+
+    //reset DMA
+    adc_dma_ll_rx_reset_channel(hal->dev, hal->dma_chan);
+    //reset peripheral
+    adc_ll_digi_reset(hal->dev);
+
+    //reset the current descriptor address
+    hal->cur_desc_ptr = &hal->desc_dummy_head;
+    adc_hal_digi_dma_link_descriptors(hal->rx_desc, data_buf, hal->eof_num * ADC_HAL_DATA_LEN_PER_CONV, hal->desc_max_num);
+    #if 0
+    //start DMA
+    adc_dma_ll_rx_start(hal->dev, hal->dma_chan, (lldesc_t *)hal->rx_desc);
+    //connect DMA and peripheral
+    adc_ll_digi_dma_enable();
+    //start ADC
+    adc_ll_digi_trigger_enable(hal->dev);
+    #endif
+}
+
+void adc_hal_digi_start_start_phase(adc_hal_context_t *hal, uint8_t *data_buf)//MB
+{
+    #if 0
+    //stop peripheral and DMA
+    adc_hal_digi_stop(hal);
+
+    //reset DMA
+    adc_dma_ll_rx_reset_channel(hal->dev, hal->dma_chan);
+    //reset peripheral
+    adc_ll_digi_reset(hal->dev);
+
+    //reset the current descriptor address
+    hal->cur_desc_ptr = &hal->desc_dummy_head;
+    adc_hal_digi_dma_link_descriptors(hal->rx_desc, data_buf, hal->eof_num * ADC_HAL_DATA_LEN_PER_CONV, hal->desc_max_num);
+    #endif
+    //start DMA
+    adc_dma_ll_rx_start(hal->dev, hal->dma_chan, (lldesc_t *)hal->rx_desc);
+    //connect DMA and peripheral
+    adc_ll_digi_dma_enable();
+    //start ADC
+    adc_ll_digi_trigger_enable(hal->dev);
+}
+#if 0
+void adc_hal_digi_trigger_disable(void)//MB
+{
+    adc_ll_digi_trigger_disable(hal->dev);
+}
+
+void adc_hal_digi_trigger_enable(void)//MB
+{
+    adc_ll_digi_trigger_enable(hal->dev);
+}
+#endif
+void adc_hal_clear_pattern_table(void)//MB
+{
+    adc_ll_digi_clear_pattern_table(ADC_NUM_1);
+    adc_ll_digi_clear_pattern_table(ADC_NUM_2);
+}
+
+
 #if !SOC_GDMA_SUPPORTED
 intptr_t adc_hal_get_desc_addr(adc_hal_context_t *hal)
 {

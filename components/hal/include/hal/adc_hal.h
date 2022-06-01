@@ -200,7 +200,13 @@ void adc_hal_digi_controller_config(adc_hal_context_t *hal, const adc_hal_digi_c
  * @param data_buf Pointer to the data buffer, the length should be multiple of ``desc_max_num`` and ``eof_num`` in ``adc_hal_context_t``
  */
 void adc_hal_digi_start(adc_hal_context_t *hal, uint8_t *data_buf);
-
+void adc_hal_digi_start_stop_phase(adc_hal_context_t *hal, uint8_t *data_buf);//MB
+void adc_hal_digi_start_start_phase(adc_hal_context_t *hal, uint8_t *data_buf);//MB
+#if 0
+void adc_hal_digi_trigger_disable(void);//MB
+void adc_hal_digi_trigger_enable(void);//MB
+#endif
+void adc_hal_clear_pattern_table(void);//MB
 #if !SOC_GDMA_SUPPORTED
 /**
  * @brief Get the DMA descriptor that Hardware has finished processing.
