@@ -330,12 +330,17 @@ static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 }
 #endif
 
+#include "freertos/semphr.h"       
+extern xSemaphoreHandle xADC_conversion_complete;//MB
+
 static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
 {
     portBASE_TYPE taskAwoken = 0;
     BaseType_t ret;
     adc_hal_dma_desc_status_t status = false;
     dma_descriptor_t *current_desc = NULL;
+
+    portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;//MB
 
     while (1) {
         status = adc_hal_get_reading_result(&adc_digi_ctx->hal, adc_digi_ctx->rx_eof_desc_addr, &current_desc);
@@ -350,6 +355,8 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
         }
     }
     adc_hal_digi_start_stop_phase(&adc_digi_ctx->hal, adc_digi_ctx->rx_dma_buf);//MB 
+    xSemaphoreGiveFromISR(xADC_conversion_complete, &xHigherPriorityTaskWoken);//MB
+    return true;//MB
     if (status == ADC_HAL_DMA_DESC_NULL) {
         static volatile int test_do_we_get_here = 7;//MB 
         test_do_we_get_here++;//MB 
