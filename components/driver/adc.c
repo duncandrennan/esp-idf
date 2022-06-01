@@ -349,10 +349,12 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
             adc_digi_ctx->ringbuf_overflow_flag = 1;
         }
     }
-
+    adc_hal_digi_start_stop_phase(&adc_digi_ctx->hal, adc_digi_ctx->rx_dma_buf);//MB 
     if (status == ADC_HAL_DMA_DESC_NULL) {
+        static volatile int test_do_we_get_here = 7;//MB 
+        test_do_we_get_here++;//MB 
         //start next turns of dma operation
-        adc_hal_digi_start(&adc_digi_ctx->hal, adc_digi_ctx->rx_dma_buf);
+        //adc_hal_digi_start(&adc_digi_ctx->hal, adc_digi_ctx->rx_dma_buf);//MB commented this line out
     }
 
     return (taskAwoken == pdTRUE);
@@ -422,6 +424,65 @@ esp_err_t adc_digi_start(void)
         ADC_EXIT_CRITICAL();
     }
 #endif  //#if CONFIG_IDF_TARGET_ESP32S2
+    return ESP_OK;
+}
+
+esp_err_t adc_digi_restart(void)//MB
+{
+    #if 0
+    if (s_adc_digi_ctx) {
+        if (s_adc_digi_ctx->driver_start_flag != 0) {
+            ESP_LOGE(ADC_TAG, "The driver is already started");
+            return ESP_ERR_INVALID_STATE;
+        }
+        adc_power_acquire();
+        //reset flags
+        s_adc_digi_ctx->ringbuf_overflow_flag = 0;
+        s_adc_digi_ctx->driver_start_flag = 1;
+        if (s_adc_digi_ctx->use_adc1) {
+            SAR_ADC1_LOCK_ACQUIRE();
+        }
+        if (s_adc_digi_ctx->use_adc2) {
+            SAR_ADC2_LOCK_ACQUIRE();
+        }
+
+#if CONFIG_PM_ENABLE
+        // Lock APB frequency while ADC driver is in use
+        esp_pm_lock_acquire(s_adc_digi_ctx->pm_lock);
+#endif
+
+#if SOC_ADC_CALIBRATION_V1_SUPPORTED
+        if (s_adc_digi_ctx->use_adc1) {
+            uint32_t cal_val = adc_get_calibration_offset(ADC_NUM_1, ADC_CHANNEL_MAX, s_adc_digi_ctx->adc1_atten);
+            adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
+        }
+        if (s_adc_digi_ctx->use_adc2) {
+            uint32_t cal_val = adc_get_calibration_offset(ADC_NUM_2, ADC_CHANNEL_MAX, s_adc_digi_ctx->adc2_atten);
+            adc_hal_set_calibration_param(ADC_NUM_2, cal_val);
+        }
+#endif  //#if SOC_ADC_CALIBRATION_V1_SUPPORTED
+
+        adc_hal_init();
+#if SOC_ADC_ARBITER_SUPPORTED
+        adc_arbiter_t config = ADC_ARBITER_CONFIG_DEFAULT();
+        adc_hal_arbiter_config(&config);
+#endif  //#if SOC_ADC_ARBITER_SUPPORTED
+
+        
+        adc_hal_set_controller(ADC_NUM_1, ADC_HAL_CONTINUOUS_READ_MODE);
+        adc_hal_set_controller(ADC_NUM_2, ADC_HAL_CONTINUOUS_READ_MODE);
+
+        adc_hal_digi_init(&s_adc_digi_ctx->hal);
+        adc_hal_digi_controller_config(&s_adc_digi_ctx->hal, &s_adc_digi_ctx->hal_digi_ctrlr_cfg);
+        #endif
+        //start conversion
+        adc_hal_clear_pattern_table();
+        //adc_hal_digi_trigger_enable();
+        adc_hal_digi_start_start_phase(&s_adc_digi_ctx->hal, s_adc_digi_ctx->rx_dma_buf);
+        
+        //adc_hal_digi_start(&s_adc_digi_ctx->hal, s_adc_digi_ctx->rx_dma_buf);
+
+    //}
     return ESP_OK;
 }
 
