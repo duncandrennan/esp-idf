@@ -372,7 +372,9 @@ void adc_hal_digi_start_stop_phase(adc_hal_context_t *hal, uint8_t *data_buf)//M
 
     //reset the current descriptor address
     hal->cur_desc_ptr = &hal->desc_dummy_head;
-    adc_hal_digi_dma_link_descriptors(hal->rx_desc, data_buf, hal->eof_num * ADC_HAL_DATA_LEN_PER_CONV, hal->desc_max_num);
+    //adc_hal_digi_dma_link_descriptors(hal->rx_desc, data_buf, hal->eof_num * ADC_HAL_DATA_LEN_PER_CONV, hal->desc_max_num);
+    hal->rx_desc->dw0.suc_eof = 0,
+    hal->rx_desc->dw0.owner = 1;
     #if 0
     //start DMA
     adc_dma_ll_rx_start(hal->dev, hal->dma_chan, (lldesc_t *)hal->rx_desc);
