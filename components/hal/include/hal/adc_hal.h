@@ -193,6 +193,8 @@ void adc_hal_digi_init(adc_hal_context_t *hal);
  */
 void adc_hal_digi_controller_config(adc_hal_context_t *hal, const adc_hal_digi_ctrlr_cfg_t *cfg);
 
+void adc_hal_digi_restart(adc_hal_context_t *hal);
+
 /**
  * @brief Start Conversion
  *

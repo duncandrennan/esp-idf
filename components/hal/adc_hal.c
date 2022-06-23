@@ -335,7 +335,13 @@ static void adc_hal_digi_dma_link_descriptors(dma_descriptor_t *desc, uint8_t *d
         data_buf += size;
         n++;
     }
-    desc[n-1].next = NULL;
+    // loop descriptors for continous sampling
+    desc[n-1].next = &desc[0];
+}
+
+void adc_hal_digi_restart(adc_hal_context_t *hal)
+{
+    adc_ll_digi_trigger_enable(hal->dev);
 }
 
 void adc_hal_digi_start(adc_hal_context_t *hal, uint8_t *data_buf)

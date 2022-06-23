@@ -337,6 +337,8 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
     adc_hal_dma_desc_status_t status = false;
     dma_descriptor_t *current_desc = NULL;
 
+    adc_digi_stop();
+
     while (1) {
         status = adc_hal_get_reading_result(&adc_digi_ctx->hal, adc_digi_ctx->rx_eof_desc_addr, &current_desc);
         if (status != ADC_HAL_DMA_DESC_VALID) {
@@ -348,6 +350,11 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
             //ringbuffer overflow
             adc_digi_ctx->ringbuf_overflow_flag = 1;
         }
+
+        // Prepare the descriptor for the next write
+        current_desc->dw0.length = 0;
+        current_desc->dw0.owner = 1;
+        current_desc->dw0.suc_eof = 0;
     }
 
     if (status == ADC_HAL_DMA_DESC_NULL) {
@@ -422,6 +429,13 @@ esp_err_t adc_digi_start(void)
         ADC_EXIT_CRITICAL();
     }
 #endif  //#if CONFIG_IDF_TARGET_ESP32S2
+    return ESP_OK;
+}
+
+esp_err_t adc_digi_restart(void)
+{
+    adc_hal_digi_restart(&s_adc_digi_ctx->hal);
+
     return ESP_OK;
 }
 

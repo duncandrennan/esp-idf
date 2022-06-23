@@ -486,6 +486,8 @@ esp_err_t adc_digi_read_bytes(uint8_t *buf, uint32_t length_max, uint32_t *out_l
  */
 esp_err_t adc_digi_start(void);
 
+esp_err_t adc_digi_restart(void);
+
 /**
  * @brief Stop the Digital ADC and DMA peripherals. After this, the hardware stops working.
  *
