@@ -335,32 +335,20 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
     portBASE_TYPE taskAwoken = 0;
     BaseType_t ret;
     adc_hal_dma_desc_status_t status = false;
-    dma_descriptor_t *current_desc = NULL;
+    dma_descriptor_t *current_desc = adc_digi_ctx->rx_eof_desc_addr;
 
-    adc_digi_stop();
+    adc_hal_digi_suspend(&adc_digi_ctx->hal);
 
-    while (1) {
-        status = adc_hal_get_reading_result(&adc_digi_ctx->hal, adc_digi_ctx->rx_eof_desc_addr, &current_desc);
-        if (status != ADC_HAL_DMA_DESC_VALID) {
-            break;
-        }
-
-        ret = xRingbufferSendFromISR(adc_digi_ctx->ringbuf_hdl, current_desc->buffer, current_desc->dw0.length, &taskAwoken);
-        if (ret == pdFALSE) {
-            //ringbuffer overflow
-            adc_digi_ctx->ringbuf_overflow_flag = 1;
-        }
-
-        // Prepare the descriptor for the next write
-        current_desc->dw0.length = 0;
-        current_desc->dw0.owner = 1;
-        current_desc->dw0.suc_eof = 0;
+    ret = xRingbufferSendFromISR(adc_digi_ctx->ringbuf_hdl, current_desc->buffer, current_desc->dw0.length, &taskAwoken);
+    if (ret == pdFALSE) {
+        //ringbuffer overflow
+        adc_digi_ctx->ringbuf_overflow_flag = 1;
     }
 
-    if (status == ADC_HAL_DMA_DESC_NULL) {
-        //start next turns of dma operation
-        adc_hal_digi_start(&adc_digi_ctx->hal, adc_digi_ctx->rx_dma_buf);
-    }
+    // Prepare the descriptor for the next write
+    current_desc->dw0.length = 0;
+    current_desc->dw0.owner = 1;
+    current_desc->dw0.suc_eof = 0;
 
     return (taskAwoken == pdTRUE);
 }

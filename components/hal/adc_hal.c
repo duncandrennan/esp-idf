@@ -341,14 +341,27 @@ static void adc_hal_digi_dma_link_descriptors(dma_descriptor_t *desc, uint8_t *d
 
 void adc_hal_digi_restart(adc_hal_context_t *hal)
 {
-    //reset peripheral
-    adc_ll_digi_reset(hal->dev);
     //start DMA
     adc_dma_ll_rx_start(hal->dev, hal->dma_chan, (lldesc_t *)hal->rx_desc);
     //connect DMA and peripheral
     adc_ll_digi_dma_enable();
     //start ADC
     adc_ll_digi_trigger_enable(hal->dev);
+}
+
+void adc_hal_digi_suspend(adc_hal_context_t *hal)
+{
+    //stop ADC
+    adc_ll_digi_trigger_disable(hal->dev);
+    //stop DMA
+    adc_dma_ll_rx_stop(hal->dev, hal->dma_chan);
+    //disconnect DMA and peripheral
+    adc_ll_digi_dma_disable();
+
+    //reset DMA
+    adc_dma_ll_rx_reset_channel(hal->dev, hal->dma_chan);
+    //reset peripheral
+    adc_ll_digi_reset(hal->dev);
 }
 
 void adc_hal_digi_start(adc_hal_context_t *hal, uint8_t *data_buf)
