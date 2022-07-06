@@ -339,7 +339,7 @@ static void adc_hal_digi_dma_link_descriptors(dma_descriptor_t *desc, uint8_t *d
     desc[n-1].next = &desc[0];
 }
 
-void adc_hal_digi_restart(adc_hal_context_t *hal)
+IRAM_ATTR void adc_hal_digi_restart(adc_hal_context_t *hal)
 {
     //start DMA
     adc_dma_ll_rx_start(hal->dev, hal->dma_chan, (lldesc_t *)hal->rx_desc);
@@ -349,7 +349,7 @@ void adc_hal_digi_restart(adc_hal_context_t *hal)
     adc_ll_digi_trigger_enable(hal->dev);
 }
 
-void adc_hal_digi_suspend(adc_hal_context_t *hal)
+IRAM_ATTR void adc_hal_digi_suspend(adc_hal_context_t *hal)
 {
     //stop ADC
     adc_ll_digi_trigger_disable(hal->dev);
