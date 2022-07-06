@@ -378,7 +378,7 @@ esp_err_t adc_digi_start(void)
 
 #if SOC_ADC_CALIBRATION_V1_SUPPORTED
         if (s_adc_digi_ctx->use_adc1) {
-            uint32_t cal_val = adc_get_calibration_offset(ADC_NUM_1, ADC_CHANNEL_MAX, s_adc_digi_ctx->adc1_atten);
+            uint32_t cal_val = adc_get_calibration_offset(ADC_NUM_1, ADC_CHANNEL_MAX, s_adc_digi_ctx->adc1_atten) - 38;
             adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
         }
         if (s_adc_digi_ctx->use_adc2) {
