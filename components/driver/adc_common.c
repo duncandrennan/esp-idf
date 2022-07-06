@@ -424,6 +424,23 @@ esp_err_t adc1_lock_release(void)
     return ESP_OK;
 }
 
+void bulldoze_cal(adc1_channel_t channel)
+{
+    uint32_t cal_val = get_calibration_offset(ADC_NUM_1, channel) - 50;
+    adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
+}
+
+uint32_t get_cal_offset(void)
+{
+    uint32_t retval = 0;
+    adc1_rtc_mode_acquire();
+    retval = get_calibration_offset(ADC_NUM_1, ADC1_CHANNEL_6);
+    adc1_lock_release();
+
+    return retval;
+}
+
+volatile uint32_t num_ch3 = 0;
 int adc1_get_raw(adc1_channel_t channel)
 {
     int adc_value;
@@ -432,8 +449,13 @@ int adc1_get_raw(adc1_channel_t channel)
 
 #if SOC_ADC_CALIBRATION_V1_SUPPORTED
     // Get calibration value before going into critical section
-    uint32_t cal_val = get_calibration_offset(ADC_NUM_1, channel);
+    uint32_t cal_val = get_calibration_offset(ADC_NUM_1, channel) - 50;
+    //if (channel == ADC1_CHANNEL_3 && num_ch3++ % 2)
+    //{
+    //    cal_val += 38;
+    //}
     adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
+    
 #endif  //SOC_ADC_CALIBRATION_V1_SUPPORTED
 
     SARADC1_ENTER();

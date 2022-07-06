@@ -242,6 +242,8 @@ esp_err_t adc1_config_width(adc_bits_width_t width_bit);
  *     - -1: Parameter error
  *     -  Other: ADC1 channel reading.
  */
+void bulldoze_cal(uint32_t cal_val);
+uint32_t get_cal_offset(void);
 int adc1_get_raw(adc1_channel_t channel);
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
