@@ -334,8 +334,7 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
 {
     portBASE_TYPE taskAwoken = 0;
     BaseType_t ret;
-    adc_hal_dma_desc_status_t status = false;
-    dma_descriptor_t *current_desc = adc_digi_ctx->rx_eof_desc_addr;
+    dma_descriptor_t *current_desc = (dma_descriptor_t *)adc_digi_ctx->rx_eof_desc_addr;
 
     adc_hal_digi_suspend(&adc_digi_ctx->hal);
 
