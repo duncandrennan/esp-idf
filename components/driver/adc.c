@@ -451,7 +451,7 @@ esp_err_t adc_digi_stop(void)
 #endif  //CONFIG_PM_ENABLE
 
         if (s_adc_digi_ctx->use_adc1) {
-            SAR_ADC1_LOCK_RELEASE();
+//            SAR_ADC1_LOCK_RELEASE();
         }
         if (s_adc_digi_ctx->use_adc2) {
             SAR_ADC2_LOCK_RELEASE();
