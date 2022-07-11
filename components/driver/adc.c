@@ -420,7 +420,7 @@ esp_err_t adc_digi_start(void)
     return ESP_OK;
 }
 
-esp_err_t adc_digi_restart(void)
+esp_err_t IRAM_ATTR adc_digi_restart(void)
 {
     adc_hal_digi_restart(&s_adc_digi_ctx->hal);
 
