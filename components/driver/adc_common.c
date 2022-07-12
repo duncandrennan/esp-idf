@@ -430,6 +430,12 @@ void bulldoze_cal(adc1_channel_t channel)
     adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
 }
 
+
+void bulldoze_cal_val(uint32_t cal_val)
+{
+    adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
+}
+
 uint32_t get_cal_offset(void)
 {
     uint32_t retval = 0;
@@ -478,11 +484,7 @@ int adc1_get_raw(adc1_channel_t channel)
 
 #if SOC_ADC_CALIBRATION_V1_SUPPORTED
     // Get calibration value before going into critical section
-    uint32_t cal_val = get_calibration_offset(ADC_NUM_1, channel) - 50;
-    //if (channel == ADC1_CHANNEL_3 && num_ch3++ % 2)
-    //{
-    //    cal_val += 38;
-    //}
+    uint32_t cal_val = (uint32_t)get_calibration_offset(ADC_NUM_1, channel);
     adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
     
 #endif  //SOC_ADC_CALIBRATION_V1_SUPPORTED

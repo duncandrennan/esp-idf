@@ -243,6 +243,7 @@ esp_err_t adc1_config_width(adc_bits_width_t width_bit);
  *     -  Other: ADC1 channel reading.
  */
 void bulldoze_cal(uint32_t cal_val);
+void bulldoze_cal_val(uint32_t cal_val);
 uint32_t get_cal_offset(void);
 int adc1_get_raw(adc1_channel_t channel);
 int adc1_get_raw_with_additional_offset(adc1_channel_t channel, uint32_t add_offset);
