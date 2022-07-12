@@ -486,7 +486,8 @@ esp_err_t adc_digi_read_bytes(uint8_t *buf, uint32_t length_max, uint32_t *out_l
  *         - ESP_ERR_INVALID_STATE Driver state is invalid.
  *         - ESP_OK                On success
  */
-esp_err_t adc_digi_start(void);
+//esp_err_t adc_digi_start(void);
+esp_err_t adc_digi_start(uint32_t offset);
 
 esp_err_t adc_digi_restart(void);
 

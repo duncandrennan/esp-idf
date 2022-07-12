@@ -353,7 +353,7 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
     return (taskAwoken == pdTRUE);
 }
 
-esp_err_t adc_digi_start(void)
+esp_err_t adc_digi_start(uint32_t offset)
 {
     if (s_adc_digi_ctx) {
         if (s_adc_digi_ctx->driver_start_flag != 0) {
@@ -378,7 +378,7 @@ esp_err_t adc_digi_start(void)
 
 #if SOC_ADC_CALIBRATION_V1_SUPPORTED
         if (s_adc_digi_ctx->use_adc1) {
-            uint32_t cal_val = adc_get_calibration_offset(ADC_NUM_1, ADC_CHANNEL_MAX, s_adc_digi_ctx->adc1_atten) - 38;
+            uint32_t cal_val = adc_get_calibration_offset(ADC_NUM_1, ADC_CHANNEL_MAX, s_adc_digi_ctx->adc1_atten) - offset;
             adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
         }
         if (s_adc_digi_ctx->use_adc2) {
