@@ -441,6 +441,35 @@ uint32_t get_cal_offset(void)
 }
 
 volatile uint32_t num_ch3 = 0;
+int adc1_get_raw_with_additional_offset(adc1_channel_t channel, uint32_t add_offset)
+{
+    int adc_value;
+    ADC_CHANNEL_CHECK(ADC_NUM_1, channel);
+    adc1_rtc_mode_acquire();
+
+#if SOC_ADC_CALIBRATION_V1_SUPPORTED
+    // Get calibration value before going into critical section
+    uint32_t cal_val = (uint32_t)get_calibration_offset(ADC_NUM_1, channel) - add_offset;
+    adc_hal_set_calibration_param(ADC_NUM_1, cal_val);
+    
+#endif  //SOC_ADC_CALIBRATION_V1_SUPPORTED
+
+    SARADC1_ENTER();
+#ifdef CONFIG_IDF_TARGET_ESP32
+    adc_ll_hall_disable(); //Disable other peripherals.
+    adc_ll_amp_disable();  //Currently the LNA is not open, close it by default.
+#endif
+    adc_ll_set_controller(ADC_NUM_1, ADC_LL_CTRL_RTC);    //Set controller
+    adc_hal_convert(ADC_NUM_1, channel, &adc_value);   //Start conversion, For ADC1, the data always valid.
+#if !CONFIG_IDF_TARGET_ESP32
+    adc_ll_rtc_reset();    //Reset FSM of rtc controller
+#endif
+    SARADC1_EXIT();
+
+    adc1_lock_release();
+    return adc_value;
+}
+
 int adc1_get_raw(adc1_channel_t channel)
 {
     int adc_value;
