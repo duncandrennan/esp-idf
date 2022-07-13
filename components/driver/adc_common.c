@@ -227,9 +227,9 @@ esp_err_t adc2_pad_get_io_num(adc2_channel_t channel, gpio_num_t *gpio_num)
 static uint32_t get_calibration_offset(adc_ll_num_t adc_n, adc_channel_t chan)
 {
     adc_atten_t atten = adc_ll_get_atten(adc_n, chan);
-    extern uint32_t adc_get_calibration_offset(adc_ll_num_t adc_n, adc_channel_t channel, adc_atten_t atten);
+    extern uint32_t adc_definitely_get_calibration_offset(adc_ll_num_t adc_n, adc_channel_t channel, adc_atten_t atten);
 
-    return adc_get_calibration_offset(adc_n, chan, atten);
+    return adc_definitely_get_calibration_offset(adc_n, chan, atten);
 }
 #endif  //SOC_ADC_CALIBRATION_V1_SUPPORTED
 
@@ -447,6 +447,20 @@ uint32_t get_cal_offset(void)
 }
 
 volatile uint32_t num_ch3 = 0;
+int adc1_get_offset(adc1_channel_t channel)
+{
+    int adc_value;
+    ADC_CHANNEL_CHECK(ADC_NUM_1, channel);
+    adc1_rtc_mode_acquire();
+
+#if SOC_ADC_CALIBRATION_V1_SUPPORTED
+    // Get calibration value before going into critical section
+    uint32_t cal_val = (uint32_t)get_calibration_offset(ADC_NUM_1, channel);
+#endif  //SOC_ADC_CALIBRATION_V1_SUPPORTED
+    adc1_lock_release();
+    return (cal_val);
+}
+
 int adc1_get_raw_with_additional_offset(adc1_channel_t channel, uint32_t add_offset)
 {
     int adc_value;

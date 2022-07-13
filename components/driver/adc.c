@@ -840,6 +840,40 @@ static inline uint32_t esp_efuse_rtc_calib_get_init_code(int version, uint32_t a
 
 static uint16_t s_adc_cali_param[SOC_ADC_PERIPH_NUM][ADC_ATTEN_MAX] = {};
 
+uint32_t adc_definitely_get_calibration_offset(adc_ll_num_t adc_n, adc_channel_t channel, adc_atten_t atten)
+{
+    uint32_t init_code = 0;
+
+    #if 0
+    if (s_adc_cali_param[adc_n][atten]) {
+        ESP_LOGV(ADC_TAG, "Use calibrated val ADC%d atten=%d: %04X", adc_n, atten, s_adc_cali_param[adc_n][atten]);
+        return (uint32_t)s_adc_cali_param[adc_n][atten];
+    }
+
+    // check if we can fetch the values from eFuse.
+    int version = esp_efuse_rtc_calib_get_ver();
+
+    if (version == ESP_EFUSE_ADC_CALIB_VER) {
+        init_code = esp_efuse_rtc_calib_get_init_code(version, adc_n, atten);
+
+    } else 
+    #endif
+    {
+        ESP_LOGD(ADC_TAG, "Calibration eFuse is not configured, use self-calibration for ICode");
+        adc_power_acquire();
+        ADC_ENTER_CRITICAL();
+        const bool internal_gnd = false;
+        init_code = adc_hal_self_calibration(adc_n, channel, atten, internal_gnd);
+        ADC_EXIT_CRITICAL();
+        adc_power_release();
+    }
+
+    s_adc_cali_param[adc_n][atten] = init_code;
+    ESP_LOGV(ADC_TAG, "Calib(V?) ADC%d atten=%d: %04X", adc_n, atten, init_code);
+
+    return init_code;
+}
+
 //NOTE: according to calibration version, different types of lock may be taken during the process:
 //  1. Semaphore when reading efuse
 //  2. Lock (Spinlock, or Mutex) if we actually do ADC calibration in the future
