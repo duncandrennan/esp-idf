@@ -338,11 +338,17 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
     portBASE_TYPE taskAwoken = 0;
     //BaseType_t ret;
     dma_descriptor_t *current_desc = (dma_descriptor_t *)adc_digi_ctx->rx_eof_desc_addr;
+    uint8_t * buf = (uint8_t *)current_desc->buffer;
 
     adc_hal_digi_suspend(&adc_digi_ctx->hal);
 
+    for (int i = 0; i < 28; i++)
+    {
+        dma_res[0][i] = *(buf + i);
+    }
+
     xSemaphoreGiveFromISR( xADC_conv_sem, &taskAwoken );
-    
+
     #if 0
     ret = xRingbufferSendFromISR(adc_digi_ctx->ringbuf_hdl, current_desc->buffer, current_desc->dw0.length, &taskAwoken);
     if (ret == pdFALSE) {
