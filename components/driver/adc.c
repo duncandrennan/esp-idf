@@ -330,20 +330,26 @@ static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 }
 #endif
 
+extern uint8_t dma_res[][32];
+extern xSemaphoreHandle xADC_conv_sem;
+
 static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
 {
     portBASE_TYPE taskAwoken = 0;
-    BaseType_t ret;
+    //BaseType_t ret;
     dma_descriptor_t *current_desc = (dma_descriptor_t *)adc_digi_ctx->rx_eof_desc_addr;
 
     adc_hal_digi_suspend(&adc_digi_ctx->hal);
 
+    xSemaphoreGiveFromISR( xADC_conv_sem, &taskAwoken );
+    
+    #if 0
     ret = xRingbufferSendFromISR(adc_digi_ctx->ringbuf_hdl, current_desc->buffer, current_desc->dw0.length, &taskAwoken);
     if (ret == pdFALSE) {
         //ringbuffer overflow
         adc_digi_ctx->ringbuf_overflow_flag = 1;
     }
-
+    #endif
     // Prepare the descriptor for the next write
     current_desc->dw0.length = 0;
     current_desc->dw0.owner = 1;
