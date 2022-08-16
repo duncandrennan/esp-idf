@@ -330,8 +330,8 @@ static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 }
 #endif
 
-extern uint8_t dma_res[][32];
-extern xSemaphoreHandle xADC_conv_sem;
+extern uint8_t dma_res[][28];
+extern xSemaphoreHandle xADC_conv_sem; 
 
 static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
 {
@@ -339,17 +339,22 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
     //BaseType_t ret;
     dma_descriptor_t *current_desc = (dma_descriptor_t *)adc_digi_ctx->rx_eof_desc_addr;
     uint8_t * buf = (uint8_t *)current_desc->buffer;
+    static uint8_t dma_buf_cnt_process_idx = 0;
 
     adc_hal_digi_suspend(&adc_digi_ctx->hal);
 
     for (int i = 0; i < 28; i++)
     {
-        dma_res[0][i] = *(buf + i);
+        dma_res[dma_buf_cnt_process_idx][i] = *(buf + i);
     }
+    dma_buf_cnt_process_idx++;
+    if (dma_buf_cnt_process_idx >= 5)
+    {
+        dma_buf_cnt_process_idx = 0;
+    }
+    xSemaphoreGiveFromISR(xADC_conv_sem, &taskAwoken);
 
-    xSemaphoreGiveFromISR( xADC_conv_sem, &taskAwoken );
-
-    #if 0
+#if 0
     ret = xRingbufferSendFromISR(adc_digi_ctx->ringbuf_hdl, current_desc->buffer, current_desc->dw0.length, &taskAwoken);
     if (ret == pdFALSE) {
         //ringbuffer overflow
