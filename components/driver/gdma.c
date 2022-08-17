@@ -763,7 +763,7 @@ static esp_err_t gdma_install_rx_interrupt(gdma_rx_channel_t *rx_chan)
     gdma_pair_t *pair = rx_chan->base.pair;
     gdma_group_t *group = pair->group;
     // pre-alloc a interrupt handle, with handler disabled
-    int isr_flags = GDMA_INTR_ALLOC_FLAGS;
+    int isr_flags = GDMA_INTR_ALLOC_FLAGS | ESP_INTR_FLAG_LEVEL2;
 #if SOC_GDMA_TX_RX_SHARE_INTERRUPT
     isr_flags |= ESP_INTR_FLAG_SHARED;
 #endif
