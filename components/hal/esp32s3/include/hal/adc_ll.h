@@ -22,9 +22,17 @@
 extern "C" {
 #endif
 
+#if (CONFIG_EZCAN_CLOCK_SPEED == 40)
+#define ADC_LL_CLK                  40000000
+#define ADC_LL_CLKM_DIV_NUM_DEFAULT 7
+#define ADC_LL_CLKM_DIV_B_DEFAULT   1
+#define ADC_LL_CLKM_DIV_A_DEFAULT   0
+#else
+#define ADC_LL_CLK                  APB_CLK_FREQ
 #define ADC_LL_CLKM_DIV_NUM_DEFAULT 15
 #define ADC_LL_CLKM_DIV_B_DEFAULT   1
 #define ADC_LL_CLKM_DIV_A_DEFAULT   0
+#endif
 
 typedef enum {
     ADC_NUM_1 = 0,          /*!< SAR ADC 1 */
