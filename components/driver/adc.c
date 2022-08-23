@@ -160,22 +160,18 @@ esp_err_t adc_digi_initialize(const adc_digi_init_config_t *init_config)
         goto cleanup;
     }
 
-    //ringbuffer
-    s_adc_digi_ctx->ringbuf_hdl = xRingbufferCreate(init_config->max_store_buf_size, RINGBUF_TYPE_BYTEBUF);
-    if (!s_adc_digi_ctx->ringbuf_hdl) {
-        ret = ESP_ERR_NO_MEM;
-        goto cleanup;
-    }
+    // No ringbuffer
+    s_adc_digi_ctx->ringbuf_hdl = NULL;
 
     //malloc internal buffer used by DMA
-    s_adc_digi_ctx->rx_dma_buf = heap_caps_calloc(1, init_config->conv_num_each_intr * INTERNAL_BUF_NUM, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    s_adc_digi_ctx->rx_dma_buf = heap_caps_calloc(1, init_config->conv_num_each_intr * init_config->max_store_buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     if (!s_adc_digi_ctx->rx_dma_buf) {
         ret = ESP_ERR_NO_MEM;
         goto cleanup;
     }
 
     //malloc dma descriptor
-    s_adc_digi_ctx->hal.rx_desc = heap_caps_calloc(1, (sizeof(dma_descriptor_t)) * INTERNAL_BUF_NUM, MALLOC_CAP_DMA);
+    s_adc_digi_ctx->hal.rx_desc = heap_caps_calloc(1, (sizeof(dma_descriptor_t)) * init_config->max_store_buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     if (!s_adc_digi_ctx->hal.rx_desc) {
         ret = ESP_ERR_NO_MEM;
         goto cleanup;
@@ -278,7 +274,7 @@ esp_err_t adc_digi_initialize(const adc_digi_init_config_t *init_config)
 #elif CONFIG_IDF_TARGET_ESP32
         .dev = (void *)I2S_LL_GET_HW(s_adc_digi_ctx->i2s_host),
 #endif
-        .desc_max_num = INTERNAL_BUF_NUM,
+        .desc_max_num = init_config->max_store_buf_size,
         .dma_chan = dma_chan,
         .eof_num = init_config->conv_num_each_intr / ADC_HAL_DATA_LEN_PER_CONV
     };
@@ -331,21 +327,25 @@ static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 #endif
 
 extern uint8_t dma_res[][28];
-extern xSemaphoreHandle xADC_conv_sem; 
+extern xSemaphoreHandle xADC_conv_sem;
+extern QueueHandle_t adc_data_queue;
 
 static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
 {
     portBASE_TYPE taskAwoken = 0;
     //BaseType_t ret;
     dma_descriptor_t *current_desc = (dma_descriptor_t *)adc_digi_ctx->rx_eof_desc_addr;
-    uint8_t * buf = (uint8_t *)current_desc->buffer;
-    static uint8_t dma_buf_cnt_process_idx = 0;
+    //uint8_t * buf = (uint8_t *)current_desc->buffer;
+    //static uint8_t dma_buf_cnt_process_idx = 0;
 
     adc_hal_digi_suspend(&adc_digi_ctx->hal);
+    adc_digi_ctx->hal.cur_desc_ptr = adc_digi_ctx->hal.cur_desc_ptr->next;
+    xQueueSendToBackFromISR(adc_data_queue, &current_desc, &taskAwoken);
 
+#if 0 
     for (int i = 0; i < 28; i++)
     {
-        dma_res[dma_buf_cnt_process_idx][i] = *(buf + i);
+        dma_res[dma_buf_cnt_process_idx][i] = 0;//*(buf + i);
     }
     dma_buf_cnt_process_idx++;
     if (dma_buf_cnt_process_idx >= 5)
@@ -354,18 +354,11 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
     }
     xSemaphoreGiveFromISR(xADC_conv_sem, &taskAwoken);
 
-#if 0
-    ret = xRingbufferSendFromISR(adc_digi_ctx->ringbuf_hdl, current_desc->buffer, current_desc->dw0.length, &taskAwoken);
-    if (ret == pdFALSE) {
-        //ringbuffer overflow
-        adc_digi_ctx->ringbuf_overflow_flag = 1;
-    }
-    #endif
     // Prepare the descriptor for the next write
     current_desc->dw0.length = 0;
     current_desc->dw0.owner = 1;
     current_desc->dw0.suc_eof = 0;
-
+#endif
     return (taskAwoken == pdTRUE);
 }
 
@@ -503,7 +496,7 @@ esp_err_t adc_digi_read_bytes(uint8_t *buf, uint32_t length_max, uint32_t *out_l
     if (timeout_ms == ADC_MAX_DELAY) {
         ticks_to_wait = portMAX_DELAY;
     }
-
+#if 0
     data = xRingbufferReceiveUpTo(s_adc_digi_ctx->ringbuf_hdl, &size, ticks_to_wait, length_max);
     if (!data) {
         ESP_LOGV(ADC_TAG, "No data, increase timeout or reduce conv_num_each_intr");
@@ -520,7 +513,7 @@ esp_err_t adc_digi_read_bytes(uint8_t *buf, uint32_t length_max, uint32_t *out_l
     if (s_adc_digi_ctx->ringbuf_overflow_flag) {
         ret = ESP_ERR_INVALID_STATE;
     }
-
+#endif
     return ret;
 }
 

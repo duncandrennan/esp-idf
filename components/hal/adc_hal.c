@@ -327,7 +327,7 @@ static void adc_hal_digi_dma_link_descriptors(dma_descriptor_t *desc, uint8_t *d
         desc[n] = (dma_descriptor_t) {
             .dw0.size = size,
             .dw0.length = 0,
-            .dw0.suc_eof = 0,
+            .dw0.suc_eof = 1,
             .dw0.owner = 1,
             .buffer = data_buf,
             .next = &desc[n+1]
@@ -342,7 +342,7 @@ static void adc_hal_digi_dma_link_descriptors(dma_descriptor_t *desc, uint8_t *d
 IRAM_ATTR void adc_hal_digi_restart(adc_hal_context_t *hal)
 {
     //start DMA
-    adc_dma_ll_rx_start(hal->dev, hal->dma_chan, (lldesc_t *)hal->rx_desc);
+    adc_dma_ll_rx_start(hal->dev, hal->dma_chan, (lldesc_t *)hal->cur_desc_ptr);
     //connect DMA and peripheral
     adc_ll_digi_dma_enable();
     //start ADC
@@ -378,12 +378,15 @@ void adc_hal_digi_start(adc_hal_context_t *hal, uint8_t *data_buf)
     hal->cur_desc_ptr = &hal->desc_dummy_head;
     adc_hal_digi_dma_link_descriptors(hal->rx_desc, data_buf, hal->eof_num * ADC_HAL_DATA_LEN_PER_CONV, hal->desc_max_num);
 
+    hal->cur_desc_ptr = (dma_descriptor_t *)hal->rx_desc;
+#if 0
     //start DMA
     adc_dma_ll_rx_start(hal->dev, hal->dma_chan, (lldesc_t *)hal->rx_desc);
     //connect DMA and peripheral
     adc_ll_digi_dma_enable();
     //start ADC
     adc_ll_digi_trigger_enable(hal->dev);
+#endif
 }
 
 #if !SOC_GDMA_SUPPORTED
