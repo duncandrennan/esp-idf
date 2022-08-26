@@ -326,39 +326,21 @@ static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 }
 #endif
 
-extern uint8_t dma_res[][28];
-extern xSemaphoreHandle xADC_conv_sem;
-extern QueueHandle_t adc_data_queue;
+extern QueueHandle_t g_adc_data_queue;
 
 static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
 {
     portBASE_TYPE taskAwoken = 0;
-    //BaseType_t ret;
     dma_descriptor_t *current_desc = (dma_descriptor_t *)adc_digi_ctx->rx_eof_desc_addr;
-    //uint8_t * buf = (uint8_t *)current_desc->buffer;
-    //static uint8_t dma_buf_cnt_process_idx = 0;
 
     adc_hal_digi_suspend(&adc_digi_ctx->hal);
+
+    // Advance the DMA descriptor pointer
+    // The next sample will use "cur_desc_ptr"
     adc_digi_ctx->hal.cur_desc_ptr = adc_digi_ctx->hal.cur_desc_ptr->next;
-    xQueueSendToBackFromISR(adc_data_queue, &current_desc, &taskAwoken);
 
-#if 0 
-    for (int i = 0; i < 28; i++)
-    {
-        dma_res[dma_buf_cnt_process_idx][i] = 0;//*(buf + i);
-    }
-    dma_buf_cnt_process_idx++;
-    if (dma_buf_cnt_process_idx >= 5)
-    {
-        dma_buf_cnt_process_idx = 0;
-    }
-    xSemaphoreGiveFromISR(xADC_conv_sem, &taskAwoken);
+    xQueueSendToBackFromISR(g_adc_data_queue, &current_desc, &taskAwoken);
 
-    // Prepare the descriptor for the next write
-    current_desc->dw0.length = 0;
-    current_desc->dw0.owner = 1;
-    current_desc->dw0.suc_eof = 0;
-#endif
     return (taskAwoken == pdTRUE);
 }
 
