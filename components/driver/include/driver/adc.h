@@ -242,7 +242,12 @@ esp_err_t adc1_config_width(adc_bits_width_t width_bit);
  *     - -1: Parameter error
  *     -  Other: ADC1 channel reading.
  */
+void bulldoze_cal(uint32_t cal_val);
+void bulldoze_cal_val(uint32_t cal_val);
+uint32_t get_cal_offset(void);
+int adc1_get_offset(adc1_channel_t channel);
 int adc1_get_raw(adc1_channel_t channel);
+int adc1_get_raw_with_additional_offset(adc1_channel_t channel, uint32_t add_offset);
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
 //TODO IDF-3610, replace these with proper caps
@@ -484,7 +489,8 @@ esp_err_t adc_digi_read_bytes(uint8_t *buf, uint32_t length_max, uint32_t *out_l
  *         - ESP_ERR_INVALID_STATE Driver state is invalid.
  *         - ESP_OK                On success
  */
-esp_err_t adc_digi_start(void);
+//esp_err_t adc_digi_start(void);
+esp_err_t adc_digi_start(uint32_t offset);
 
 esp_err_t adc_digi_restart(void);
 
