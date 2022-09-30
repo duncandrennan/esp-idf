@@ -172,6 +172,9 @@ esp_err_t twai_driver_uninstall(void);
  */
 esp_err_t twai_start(void);
 
+//  this is identical to twai_start(), except that the mode to start with can be passed in
+esp_err_t twai_start_with_mode(twai_mode_t mode);//MB
+
 /**
  * @brief   Stop the TWAI driver
  *
