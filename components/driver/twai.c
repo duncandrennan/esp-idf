@@ -506,6 +506,28 @@ esp_err_t twai_start(void)
     return ESP_OK;
 }
 
+esp_err_t twai_start_with_mode(twai_mode_t mode)//MB
+{
+    //Check state
+    TWAI_ENTER_CRITICAL();
+    TWAI_CHECK_FROM_CRIT(p_twai_obj != NULL, ESP_ERR_INVALID_STATE);
+    TWAI_CHECK_FROM_CRIT(p_twai_obj->state == TWAI_STATE_STOPPED, ESP_ERR_INVALID_STATE);
+
+    //Reset RX queue, RX message count, amd TX queue
+    xQueueReset(p_twai_obj->rx_queue);
+    if (p_twai_obj->tx_queue != NULL) {
+        xQueueReset(p_twai_obj->tx_queue);
+    }
+    p_twai_obj->rx_msg_count = 0;
+    p_twai_obj->tx_msg_count = 0;
+    p_twai_obj->mode = mode;
+    twai_hal_start(&twai_context, p_twai_obj->mode);
+
+    p_twai_obj->state = TWAI_STATE_RUNNING;
+    TWAI_EXIT_CRITICAL();
+    return ESP_OK;
+}
+
 esp_err_t twai_stop(void)
 {
     //Check state
