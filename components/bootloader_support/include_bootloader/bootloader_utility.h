@@ -47,6 +47,8 @@ int bootloader_utility_get_selected_boot_partition(const bootloader_state_t *bs)
  */
 __attribute__((noreturn)) void bootloader_utility_load_boot_image(const bootloader_state_t *bs, int start_index);
 
+__attribute__((noreturn)) void bootloader_utility_load_image(const esp_image_metadata_t *image_data);
+
 #ifdef CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP
 /**
  * @brief Load that application which was worked before we go to the deep sleep.
