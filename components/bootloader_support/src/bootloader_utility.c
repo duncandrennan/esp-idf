@@ -533,6 +533,15 @@ void bootloader_utility_load_boot_image(const bootloader_state_t *bs, int start_
     bootloader_reset();
 }
 
+void bootloader_utility_load_image(const esp_image_metadata_t *image_data)
+{
+    load_image(image_data);
+
+    ESP_LOGE(TAG, "Unable to boot image");
+    bzero(&image_data, sizeof(esp_image_metadata_t));
+    bootloader_reset();
+}
+
 // Copy loaded segments to RAM, set up caches for mapped segments, and start application.
 static void load_image(const esp_image_metadata_t *image_data)
 {
