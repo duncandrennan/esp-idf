@@ -254,7 +254,7 @@ static esp_err_t encrypt_bootloader(void)
         }
 #endif // CONFIG_SECURE_BOOT_V2_ENABLED
 
-        err = esp_flash_encrypt_region(ESP_BOOTLOADER_OFFSET, image_length);
+        err = esp_flash_encrypt_region(ESP_BOOTLOADER_OFFSET, ESP_PARTITION_TABLE_OFFSET);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to encrypt bootloader in place: 0x%x", err);
             return err;
