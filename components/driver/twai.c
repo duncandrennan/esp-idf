@@ -506,6 +506,20 @@ esp_err_t twai_start(void)
     return ESP_OK;
 }
 
+esp_err_t twai_set_mode(twai_mode_t mode)//MB
+{
+    //Check state
+    TWAI_ENTER_CRITICAL();
+    TWAI_CHECK_FROM_CRIT(p_twai_obj != NULL, ESP_ERR_INVALID_STATE);
+    TWAI_CHECK_FROM_CRIT(p_twai_obj->state == TWAI_STATE_STOPPED, ESP_ERR_INVALID_STATE);
+
+    p_twai_obj->mode = mode;
+
+    TWAI_EXIT_CRITICAL();
+
+    return ESP_OK;
+}
+
 esp_err_t twai_stop(void)
 {
     //Check state
