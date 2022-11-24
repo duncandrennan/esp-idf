@@ -5,8 +5,10 @@
  */
 
 #include <strings.h>
+#include <string.h>
 #include "bootloader_flash_priv.h"
 #include "bootloader_random.h"
+#include "bootloader_common.h"
 #include "esp_image_format.h"
 #include "esp_flash_encrypt.h"
 #include "esp_flash_partitions.h"
@@ -311,8 +313,36 @@ static esp_err_t encrypt_partition(int index, const esp_partition_info_t *partit
 {
     esp_err_t err;
     bool should_encrypt = (partition->flags & PART_FLAG_ENCRYPTED);
+    uint32_t version;
 
     if (partition->type == PART_TYPE_APP) {
+        if (partition->subtype == PART_SUBTYPE_FACTORY)
+        {
+            should_encrypt = true;
+        }
+        else if ((partition->subtype & ~PART_SUBTYPE_OTA_MASK) == PART_SUBTYPE_OTA_FLAG)
+        {
+            if ((partition->subtype & PART_SUBTYPE_OTA_MASK) < 2)
+            {
+                err = bootloader_flash_read(partition->pos.offset + 0xFFC0 + 0x20, &version, 4, false);
+                if ((err != ESP_OK ) || 
+                        ((version != 0xFFFFFFFF) && ((version >> 8) >= 30)))
+                {
+                    should_encrypt = true;
+                }
+            }
+        }
+#ifndef NDEBUG
+        // Want to retain and encrypt all app partitions in production
+        should_encrypt = true;
+#endif
+
+        // Delete if we're not encrypting
+        if (!should_encrypt)
+        {
+            bootloader_flash_erase_range(partition->pos.offset, partition->pos.size);
+        }
+
 #if 0
         /* check if the partition holds a valid unencrypted app */
         esp_image_metadata_t data_ignored;
@@ -321,11 +351,21 @@ static esp_err_t encrypt_partition(int index, const esp_partition_info_t *partit
                                &data_ignored);
         should_encrypt = (err == ESP_OK);
 #endif
-        should_encrypt = true;
     } else if ((partition->type == PART_TYPE_DATA && partition->subtype == PART_SUBTYPE_DATA_OTA)
                 || (partition->type == PART_TYPE_DATA && partition->subtype == PART_SUBTYPE_DATA_NVS_KEYS)) {
         /* check if we have ota data partition and the partition should be encrypted unconditionally */
         should_encrypt = true;
+    } else if ((partition->type == PART_TYPE_DATA) && (memcmp(partition->label, "datapack", 8) == 0)) {
+#ifdef NDEBUG
+        should_encrypt = false;
+        bootloader_flash_erase_range(partition->pos.offset, partition->pos.size);
+#else
+        // Retain and encrypt in production
+        should_encrypt = true;
+#endif
+    } else if (partition->type == PART_TYPE_DATA && (memcmp(partition->label, "staging", 7) == 0)) {
+        should_encrypt = false;
+        bootloader_flash_erase_range(partition->pos.offset, partition->pos.size);
     }
 
     if (!should_encrypt) {
