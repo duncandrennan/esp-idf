@@ -804,6 +804,7 @@ static int UART_ISR_ATTR uart_find_pattern_from_last(uint8_t *buf, int length, u
 }
 
 //internal isr handler for default driver code.
+#include "C:\Projects\HEXecut\code\main\debug_helper.h"
 static void UART_ISR_ATTR uart_rx_intr_handler_default(void *param)
 {
     uart_obj_t *p_uart = (uart_obj_t *) param;
@@ -1111,6 +1112,349 @@ static void UART_ISR_ATTR uart_rx_intr_handler_default(void *param)
             }
         }
     }
+    if (HPTaskAwoken == pdTRUE) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+extern uint8_t g_read_uart;
+extern xSemaphoreHandle xLIN_interrupt_sem;
+static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
+{
+    uart_obj_t *p_uart = (uart_obj_t *) param;
+    uint8_t uart_num = p_uart->uart_num;
+    int rx_fifo_len = 0;
+    uint32_t uart_intr_status = 0;
+    //uart_event_t uart_event;
+    portBASE_TYPE HPTaskAwoken = 0;
+    static uint8_t pat_flg = 0;
+    __digitalWrite(DBG_PIN_LED_RED, 1);
+    __digitalWrite(DBG_PIN_LED_RED, 0);
+    while (1) {
+        // The `continue statement` may cause the interrupt to loop infinitely
+        // we exit the interrupt here
+        uart_intr_status = uart_hal_get_intsts_mask(&(uart_context[uart_num].hal));
+        //Exit form while loop
+        if (uart_intr_status == 0) {
+            break;
+        }
+        //uart_event.type = UART_EVENT_MAX;
+        #if 0
+        if (uart_intr_status & UART_INTR_TXFIFO_EMPTY) {
+            UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_INTR_TXFIFO_EMPTY);
+            UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_TXFIFO_EMPTY);
+            if (p_uart->tx_waiting_brk) {
+                continue;
+            }
+            //TX semaphore will only be used when tx_buf_size is zero.
+            if (p_uart->tx_waiting_fifo == true && p_uart->tx_buf_size == 0) {
+                p_uart->tx_waiting_fifo = false;
+                xSemaphoreGiveFromISR(p_uart->tx_fifo_sem, &HPTaskAwoken);
+            } else {
+                //We don't use TX ring buffer, because the size is zero.
+                if (p_uart->tx_buf_size == 0) {
+                    continue;
+                }
+                bool en_tx_flg = false;
+                uint32_t tx_fifo_rem = uart_hal_get_txfifo_len(&(uart_context[uart_num].hal));
+                //We need to put a loop here, in case all the buffer items are very short.
+                //That would cause a watch_dog reset because empty interrupt happens so often.
+                //Although this is a loop in ISR, this loop will execute at most 128 turns.
+                while (tx_fifo_rem) {
+                    if (p_uart->tx_len_tot == 0 || p_uart->tx_ptr == NULL || p_uart->tx_len_cur == 0) {
+                        size_t size;
+                        p_uart->tx_head = (uart_tx_data_t *) xRingbufferReceiveFromISR(p_uart->tx_ring_buf, &size);
+                        if (p_uart->tx_head) {
+                            //The first item is the data description
+                            //Get the first item to get the data information
+                            if (p_uart->tx_len_tot == 0) {
+                                p_uart->tx_ptr = NULL;
+                                p_uart->tx_len_tot = p_uart->tx_head->tx_data.size;
+                                if (p_uart->tx_head->type == UART_DATA_BREAK) {
+                                    p_uart->tx_brk_flg = 1;
+                                    p_uart->tx_brk_len = p_uart->tx_head->tx_data.brk_len;
+                                }
+                                //We have saved the data description from the 1st item, return buffer.
+                                vRingbufferReturnItemFromISR(p_uart->tx_ring_buf, p_uart->tx_head, &HPTaskAwoken);
+                            } else if (p_uart->tx_ptr == NULL) {
+                                //Update the TX item pointer, we will need this to return item to buffer.
+                                p_uart->tx_ptr = (uint8_t *)p_uart->tx_head;
+                                en_tx_flg = true;
+                                p_uart->tx_len_cur = size;
+                            }
+                        } else {
+                            //Can not get data from ring buffer, return;
+                            break;
+                        }
+                    }
+                    if (p_uart->tx_len_tot > 0 && p_uart->tx_ptr && p_uart->tx_len_cur > 0) {
+                        //To fill the TX FIFO.
+                        uint32_t send_len = 0;
+                        // Set RS485 RTS pin before transmission if the half duplex mode is enabled
+                        if (UART_IS_MODE_SET(uart_num, UART_MODE_RS485_HALF_DUPLEX)) {
+                            UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                            uart_hal_set_rts(&(uart_context[uart_num].hal), 0);
+                            uart_hal_ena_intr_mask(&(uart_context[uart_num].hal), UART_INTR_TX_DONE);
+                            UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                        }
+                        uart_hal_write_txfifo(&(uart_context[uart_num].hal),
+                                              (const uint8_t *)p_uart->tx_ptr,
+                                              (p_uart->tx_len_cur > tx_fifo_rem) ? tx_fifo_rem : p_uart->tx_len_cur,
+                                              &send_len);
+                        p_uart->tx_ptr += send_len;
+                        p_uart->tx_len_tot -= send_len;
+                        p_uart->tx_len_cur -= send_len;
+                        tx_fifo_rem -= send_len;
+                        if (p_uart->tx_len_cur == 0) {
+                            //Return item to ring buffer.
+                            vRingbufferReturnItemFromISR(p_uart->tx_ring_buf, p_uart->tx_head, &HPTaskAwoken);
+                            p_uart->tx_head = NULL;
+                            p_uart->tx_ptr = NULL;
+                            //Sending item done, now we need to send break if there is a record.
+                            //Set TX break signal after FIFO is empty
+                            if (p_uart->tx_len_tot == 0 && p_uart->tx_brk_flg == 1) {
+                                uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_TX_BRK_DONE);
+                                UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                                uart_hal_tx_break(&(uart_context[uart_num].hal), p_uart->tx_brk_len);
+                                uart_hal_ena_intr_mask(&(uart_context[uart_num].hal), UART_INTR_TX_BRK_DONE);
+                                UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                                p_uart->tx_waiting_brk = 1;
+                                //do not enable TX empty interrupt
+                                en_tx_flg = false;
+                            } else {
+                                //enable TX empty interrupt
+                                en_tx_flg = true;
+                            }
+                        } else {
+                            //enable TX empty interrupt
+                            en_tx_flg = true;
+                        }
+                    }
+                }
+                if (en_tx_flg) {
+                    uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_TXFIFO_EMPTY);
+                    UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                    uart_hal_ena_intr_mask(&(uart_context[uart_num].hal), UART_INTR_TXFIFO_EMPTY);
+                    UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                }
+            }
+        } else 
+        #endif
+        if ((uart_intr_status & UART_INTR_RXFIFO_TOUT)
+                   || (uart_intr_status & UART_INTR_RXFIFO_FULL)
+                   || (uart_intr_status & UART_INTR_CMD_CHAR_DET)
+                  ) {
+#if 0
+            if (pat_flg == 1) {
+                uart_intr_status |= UART_INTR_CMD_CHAR_DET;
+                pat_flg = 0;
+            }
+#endif
+            if (p_uart->rx_buffer_full_flg == false)
+            {
+                rx_fifo_len = uart_hal_get_rxfifo_len(&(uart_context[uart_num].hal));
+#if 0
+                if ((p_uart_obj[uart_num]->rx_always_timeout_flg) && !(uart_intr_status & UART_INTR_RXFIFO_TOUT)) {
+                    rx_fifo_len--; // leave one byte in the fifo in order to trigger uart_intr_rxfifo_tout
+                }
+#endif
+                uart_hal_read_rxfifo(&(uart_context[uart_num].hal), p_uart->rx_data_buf, &rx_fifo_len);
+                g_read_uart = p_uart->rx_data_buf[0];
+                xSemaphoreGiveFromISR(xLIN_interrupt_sem, &HPTaskAwoken);
+                #if 0
+                uint8_t pat_chr = 0;
+                uint8_t pat_num = 0;
+                int pat_idx = -1;
+                uart_hal_get_at_cmd_char(&(uart_context[uart_num].hal), &pat_chr, &pat_num);
+
+                //Get the buffer from the FIFO
+                if (uart_intr_status & UART_INTR_CMD_CHAR_DET) {
+                    uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_CMD_CHAR_DET);
+                    uart_event.type = UART_PATTERN_DET;
+                    uart_event.size = rx_fifo_len;
+                    pat_idx = uart_find_pattern_from_last(p_uart->rx_data_buf, rx_fifo_len - 1, pat_chr, pat_num);
+                } else {
+                    #endif
+                    //After Copying the Data From FIFO ,Clear intr_status
+                    uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_TOUT | UART_INTR_RXFIFO_FULL);
+                    #if 0
+                    uart_event.type = UART_DATA;
+                    uart_event.size = rx_fifo_len;
+                    uart_event.timeout_flag = (uart_intr_status & UART_INTR_RXFIFO_TOUT) ? true : false;
+                    UART_ENTER_CRITICAL_ISR(&uart_selectlock);
+                    if (p_uart->uart_select_notif_callback) {
+                        p_uart->uart_select_notif_callback(uart_num, UART_SELECT_READ_NOTIF, &HPTaskAwoken);
+                    }
+                    UART_EXIT_CRITICAL_ISR(&uart_selectlock);
+                    
+                }
+                #endif
+                #if 0
+                p_uart->rx_stash_len = rx_fifo_len;
+                //If we fail to push data to ring buffer, we will have to stash the data, and send next time.
+                //Mainly for applications that uses flow control or small ring buffer.
+
+                if (pdFALSE == xRingbufferSendFromISR(p_uart->rx_ring_buf, p_uart->rx_data_buf, p_uart->rx_stash_len, &HPTaskAwoken)) {
+                    p_uart->rx_buffer_full_flg = true;
+                    UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                    uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_TOUT | UART_INTR_RXFIFO_FULL);
+                    UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                    if (uart_event.type == UART_PATTERN_DET) {
+                        UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                        if (rx_fifo_len < pat_num) {
+                            //some of the characters are read out in last interrupt
+                            uart_pattern_enqueue(uart_num, p_uart->rx_buffered_len - (pat_num - rx_fifo_len));
+                        } else {
+                            uart_pattern_enqueue(uart_num,
+                                                 pat_idx <= -1 ?
+                                                 //can not find the pattern in buffer,
+                                                 p_uart->rx_buffered_len + p_uart->rx_stash_len :
+                                                 // find the pattern in buffer
+                                                 p_uart->rx_buffered_len + pat_idx);
+                        }
+                        UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                        if ((p_uart->event_queue != NULL) && (pdFALSE == xQueueSendFromISR(p_uart->event_queue, (void * )&uart_event, &HPTaskAwoken))) {
+#ifndef CONFIG_UART_ISR_IN_IRAM     //Only log if ISR is not in IRAM
+                            ESP_EARLY_LOGV(UART_TAG, "UART event queue full");
+#endif
+                        }
+                    }
+                    uart_event.type = UART_BUFFER_FULL;
+                } else {
+                    UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                    if (uart_intr_status & UART_INTR_CMD_CHAR_DET) {
+                        if (rx_fifo_len < pat_num) {
+                            //some of the characters are read out in last interrupt
+                            uart_pattern_enqueue(uart_num, p_uart->rx_buffered_len - (pat_num - rx_fifo_len));
+                        } else if (pat_idx >= 0) {
+                            // find the pattern in stash buffer.
+                            uart_pattern_enqueue(uart_num, p_uart->rx_buffered_len + pat_idx);
+                        }
+                    }
+                    p_uart->rx_buffered_len += p_uart->rx_stash_len;
+                    UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                }
+#endif
+            }
+#if 0
+            else {
+                UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT);
+                UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT);
+                if (uart_intr_status & UART_INTR_CMD_CHAR_DET) {
+                    uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_CMD_CHAR_DET);
+                    uart_event.type = UART_PATTERN_DET;
+                    uart_event.size = rx_fifo_len;
+                    pat_flg = 1;
+                }
+            }
+
+        } else if (uart_intr_status & UART_INTR_RXFIFO_OVF) {
+            // When fifo overflows, we reset the fifo.
+            UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_rxfifo_rst(&(uart_context[uart_num].hal));
+            UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            UART_ENTER_CRITICAL_ISR(&uart_selectlock);
+            if (p_uart->uart_select_notif_callback) {
+                p_uart->uart_select_notif_callback(uart_num, UART_SELECT_ERROR_NOTIF, &HPTaskAwoken);
+            }
+            UART_EXIT_CRITICAL_ISR(&uart_selectlock);
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_OVF);
+            uart_event.type = UART_FIFO_OVF;
+        } else if (uart_intr_status & UART_INTR_BRK_DET) {
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_BRK_DET);
+            uart_event.type = UART_BREAK;
+        } else if (uart_intr_status & UART_INTR_FRAM_ERR) {
+            UART_ENTER_CRITICAL_ISR(&uart_selectlock);
+            if (p_uart->uart_select_notif_callback) {
+                p_uart->uart_select_notif_callback(uart_num, UART_SELECT_ERROR_NOTIF, &HPTaskAwoken);
+            }
+            UART_EXIT_CRITICAL_ISR(&uart_selectlock);
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_FRAM_ERR);
+            uart_event.type = UART_FRAME_ERR;
+        } else if (uart_intr_status & UART_INTR_PARITY_ERR) {
+            UART_ENTER_CRITICAL_ISR(&uart_selectlock);
+            if (p_uart->uart_select_notif_callback) {
+                p_uart->uart_select_notif_callback(uart_num, UART_SELECT_ERROR_NOTIF, &HPTaskAwoken);
+            }
+            UART_EXIT_CRITICAL_ISR(&uart_selectlock);
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_PARITY_ERR);
+            uart_event.type = UART_PARITY_ERR;
+        } else if (uart_intr_status & UART_INTR_TX_BRK_DONE) {
+            UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_tx_break(&(uart_context[uart_num].hal), 0);
+            uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_INTR_TX_BRK_DONE);
+            if (p_uart->tx_brk_flg == 1) {
+                uart_hal_ena_intr_mask(&(uart_context[uart_num].hal), UART_INTR_TXFIFO_EMPTY);
+            }
+            UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_TX_BRK_DONE);
+            if (p_uart->tx_brk_flg == 1) {
+                p_uart->tx_brk_flg = 0;
+                p_uart->tx_waiting_brk = 0;
+            } else {
+                xSemaphoreGiveFromISR(p_uart->tx_brk_sem, &HPTaskAwoken);
+            }
+        } else if (uart_intr_status & UART_INTR_TX_BRK_IDLE) {
+            UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_INTR_TX_BRK_IDLE);
+            UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_TX_BRK_IDLE);
+        } else if (uart_intr_status & UART_INTR_CMD_CHAR_DET) {
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_CMD_CHAR_DET);
+            uart_event.type = UART_PATTERN_DET;
+        } else if ((uart_intr_status & UART_INTR_RS485_PARITY_ERR)
+                   || (uart_intr_status & UART_INTR_RS485_FRM_ERR)
+                   || (uart_intr_status & UART_INTR_RS485_CLASH)) {
+            // RS485 collision or frame error interrupt triggered
+            UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_rxfifo_rst(&(uart_context[uart_num].hal));
+            // Set collision detection flag
+            p_uart_obj[uart_num]->coll_det_flg = true;
+            UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_RS485_CLASH | UART_INTR_RS485_FRM_ERR | UART_INTR_RS485_PARITY_ERR);
+            uart_event.type = UART_EVENT_MAX;
+        } else if (uart_intr_status & UART_INTR_TX_DONE) {
+            if (UART_IS_MODE_SET(uart_num, UART_MODE_RS485_HALF_DUPLEX) && uart_hal_is_tx_idle(&(uart_context[uart_num].hal)) != true) {
+                // The TX_DONE interrupt is triggered but transmit is active
+                // then postpone interrupt processing for next interrupt
+                uart_event.type = UART_EVENT_MAX;
+            } else {
+                // Workaround for RS485: If the RS485 half duplex mode is active
+                // and transmitter is in idle state then reset received buffer and reset RTS pin
+                // skip this behavior for other UART modes
+                UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_INTR_TX_DONE);
+                if (UART_IS_MODE_SET(uart_num, UART_MODE_RS485_HALF_DUPLEX)) {
+                    uart_hal_rxfifo_rst(&(uart_context[uart_num].hal));
+                    uart_hal_set_rts(&(uart_context[uart_num].hal), 1);
+                }
+                UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_TX_DONE);
+                xSemaphoreGiveFromISR(p_uart_obj[uart_num]->tx_done_sem, &HPTaskAwoken);
+            }
+        } 
+        #endif
+                  }
+        else {
+            uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), uart_intr_status); /*simply clear all other intr status*/
+            //uart_event.type = UART_EVENT_MAX;
+        }
+#if 0
+        if (uart_event.type != UART_EVENT_MAX && p_uart->event_queue) {
+            if (pdFALSE == xQueueSendFromISR(p_uart->event_queue, (void * )&uart_event, &HPTaskAwoken)) {
+#ifndef CONFIG_UART_ISR_IN_IRAM // Only log if ISR is not in IRAM
+                ESP_EARLY_LOGV(UART_TAG, "UART event queue full");
+#endif
+            }
+        }
+#endif
+    }
+    __digitalWrite(DBG_PIN_LED_RED, 1);
+    __digitalWrite(DBG_PIN_LED_RED, 0);
     if (HPTaskAwoken == pdTRUE) {
         portYIELD_FROM_ISR();
     }
@@ -1610,7 +1954,89 @@ esp_err_t uart_driver_install(uart_port_t uart_num, int rx_buffer_size, int tx_b
     uart_module_enable(uart_num);
     uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_LL_INTR_MASK);
     uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_LL_INTR_MASK);
-    r = uart_isr_register(uart_num, uart_rx_intr_handler_default, p_uart_obj[uart_num], intr_alloc_flags, &p_uart_obj[uart_num]->intr_handle);
+    r = uart_isr_register(uart_num, uart_rx_intr_handler_default, p_uart_obj[uart_num], intr_alloc_flags, &p_uart_obj[uart_num]->intr_handle);//uart_rx_intr_handler_default
+    if (r != ESP_OK) {
+        goto err;
+    }
+    r = uart_intr_config(uart_num, &uart_intr);
+    if (r != ESP_OK) {
+        goto err;
+    }
+    return r;
+
+err:
+    uart_driver_delete(uart_num);
+    return r;
+}
+
+esp_err_t uart_driver_install_lin(uart_port_t uart_num, int rx_buffer_size, int tx_buffer_size, int event_queue_size, QueueHandle_t *uart_queue, int intr_alloc_flags)
+{
+    esp_err_t r;
+#ifdef CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
+    ESP_RETURN_ON_FALSE((uart_num != CONFIG_ESP_CONSOLE_UART_NUM), ESP_FAIL, UART_TAG, "UART used by GDB-stubs! Please disable GDB in menuconfig.");
+#endif // CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
+    ESP_RETURN_ON_FALSE((uart_num < UART_NUM_MAX), ESP_FAIL, UART_TAG, "uart_num error");
+    ESP_RETURN_ON_FALSE((rx_buffer_size > SOC_UART_FIFO_LEN), ESP_FAIL, UART_TAG, "uart rx buffer length error");
+    ESP_RETURN_ON_FALSE((tx_buffer_size > SOC_UART_FIFO_LEN) || (tx_buffer_size == 0), ESP_FAIL, UART_TAG, "uart tx buffer length error");
+#if CONFIG_UART_ISR_IN_IRAM
+    if ((intr_alloc_flags & ESP_INTR_FLAG_IRAM) == 0) {
+        ESP_LOGI(UART_TAG, "ESP_INTR_FLAG_IRAM flag not set while CONFIG_UART_ISR_IN_IRAM is enabled, flag updated");
+        intr_alloc_flags |= ESP_INTR_FLAG_IRAM;
+    }
+#else
+    if ((intr_alloc_flags & ESP_INTR_FLAG_IRAM) != 0) {
+        ESP_LOGW(UART_TAG, "ESP_INTR_FLAG_IRAM flag is set while CONFIG_UART_ISR_IN_IRAM is not enabled, flag updated");
+        intr_alloc_flags &= ~ESP_INTR_FLAG_IRAM;
+    }
+#endif
+
+    if (p_uart_obj[uart_num] == NULL) {
+        p_uart_obj[uart_num] = uart_alloc_driver_obj(event_queue_size, tx_buffer_size, rx_buffer_size);
+        if (p_uart_obj[uart_num] == NULL) {
+            ESP_LOGE(UART_TAG, "UART driver malloc error");
+            return ESP_FAIL;
+        }
+        p_uart_obj[uart_num]->uart_num = uart_num;
+        p_uart_obj[uart_num]->uart_mode = UART_MODE_UART;
+        p_uart_obj[uart_num]->coll_det_flg = false;
+        p_uart_obj[uart_num]->rx_always_timeout_flg = false;
+        p_uart_obj[uart_num]->event_queue_size = event_queue_size;
+        p_uart_obj[uart_num]->tx_ptr = NULL;
+        p_uart_obj[uart_num]->tx_head = NULL;
+        p_uart_obj[uart_num]->tx_len_tot = 0;
+        p_uart_obj[uart_num]->tx_brk_flg = 0;
+        p_uart_obj[uart_num]->tx_brk_len = 0;
+        p_uart_obj[uart_num]->tx_waiting_brk = 0;
+        p_uart_obj[uart_num]->rx_buffered_len = 0;
+        p_uart_obj[uart_num]->rx_buffer_full_flg = false;
+        p_uart_obj[uart_num]->tx_waiting_fifo = false;
+        p_uart_obj[uart_num]->rx_ptr = NULL;
+        p_uart_obj[uart_num]->rx_cur_remain = 0;
+        p_uart_obj[uart_num]->rx_int_usr_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT;
+        p_uart_obj[uart_num]->rx_head_ptr = NULL;
+        p_uart_obj[uart_num]->tx_buf_size = tx_buffer_size;
+        p_uart_obj[uart_num]->uart_select_notif_callback = NULL;
+        xSemaphoreGive(p_uart_obj[uart_num]->tx_fifo_sem);
+        uart_pattern_queue_reset(uart_num, UART_PATTERN_DET_QLEN_DEFAULT);
+        if (uart_queue) {
+            *uart_queue = p_uart_obj[uart_num]->event_queue;
+            ESP_LOGI(UART_TAG, "queue free spaces: %d", uxQueueSpacesAvailable(p_uart_obj[uart_num]->event_queue));
+        }
+    } else {
+        ESP_LOGE(UART_TAG, "UART driver already installed");
+        return ESP_FAIL;
+    }
+
+    uart_intr_config_t uart_intr = {
+        .intr_enable_mask = UART_INTR_CONFIG_FLAG,
+        .rxfifo_full_thresh = UART_FULL_THRESH_DEFAULT,
+        .rx_timeout_thresh = UART_TOUT_THRESH_DEFAULT,
+        .txfifo_empty_intr_thresh = UART_EMPTY_THRESH_DEFAULT,
+    };
+    uart_module_enable(uart_num);
+    uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_LL_INTR_MASK);
+    uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_LL_INTR_MASK);
+    r = uart_isr_register(uart_num, uart_rx_intr_handler_lin, p_uart_obj[uart_num], intr_alloc_flags, &p_uart_obj[uart_num]->intr_handle);//uart_rx_intr_handler_default
     if (r != ESP_OK) {
         goto err;
     }
