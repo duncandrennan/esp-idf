@@ -804,7 +804,6 @@ static int UART_ISR_ATTR uart_find_pattern_from_last(uint8_t *buf, int length, u
 }
 
 //internal isr handler for default driver code.
-#include "C:\Projects\HEXecut\code\main\debug_helper.h"
 static void UART_ISR_ATTR uart_rx_intr_handler_default(void *param)
 {
     uart_obj_t *p_uart = (uart_obj_t *) param;
@@ -1128,8 +1127,6 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
     //uart_event_t uart_event;
     portBASE_TYPE HPTaskAwoken = 0;
     static uint8_t pat_flg = 0;
-    __digitalWrite(DBG_PIN_LED_RED, 1);
-    __digitalWrite(DBG_PIN_LED_RED, 0);
     while (1) {
         // The `continue statement` may cause the interrupt to loop infinitely
         // we exit the interrupt here
@@ -1453,8 +1450,6 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
         }
 #endif
     }
-    __digitalWrite(DBG_PIN_LED_RED, 1);
-    __digitalWrite(DBG_PIN_LED_RED, 0);
     if (HPTaskAwoken == pdTRUE) {
         portYIELD_FROM_ISR();
     }
