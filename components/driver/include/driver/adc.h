@@ -501,7 +501,8 @@ esp_err_t adc_digi_restart(void);
  *         - ESP_ERR_INVALID_STATE Driver state is invalid.
  *         - ESP_OK                On success
  */
-esp_err_t adc_digi_stop(void);
+//esp_err_t adc_digi_stop(void);
+esp_err_t adc_digi_stop(bool release_lock);
 
 /**
  * @brief Deinitialize the Digital ADC.

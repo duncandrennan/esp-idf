@@ -427,7 +427,7 @@ esp_err_t IRAM_ATTR adc_digi_restart(void)
     return ESP_OK;
 }
 
-esp_err_t adc_digi_stop(void)
+esp_err_t adc_digi_stop(bool release_lock)
 {
     if (s_adc_digi_ctx) {
         if (s_adc_digi_ctx->driver_start_flag != 1) {
@@ -450,12 +450,18 @@ esp_err_t adc_digi_stop(void)
         }
 #endif  //CONFIG_PM_ENABLE
 
-        if (s_adc_digi_ctx->use_adc1) {
-//            SAR_ADC1_LOCK_RELEASE();
+        if (release_lock == true)
+        {
+            if (s_adc_digi_ctx->use_adc1)
+            {
+                SAR_ADC1_LOCK_RELEASE();
+            }
+            if (s_adc_digi_ctx->use_adc2)
+            {
+                SAR_ADC2_LOCK_RELEASE();
+            }
         }
-        if (s_adc_digi_ctx->use_adc2) {
-            SAR_ADC2_LOCK_RELEASE();
-        }
+
         adc_power_release();
     }
 #if CONFIG_IDF_TARGET_ESP32S2
