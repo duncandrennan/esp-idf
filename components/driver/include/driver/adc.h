@@ -494,6 +494,8 @@ esp_err_t adc_digi_start(uint32_t offset, uint32_t * cal_return);
 
 esp_err_t adc_digi_restart(void);
 
+esp_err_t adc_digi_dma_reset_descriptors(void);
+
 /**
  * @brief Stop the Digital ADC and DMA peripherals. After this, the hardware stops working.
  *

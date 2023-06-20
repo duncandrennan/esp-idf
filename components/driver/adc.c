@@ -297,6 +297,19 @@ cleanup:
     return ret;
 }
 
+esp_err_t adc_digi_dma_reset_descriptors(void)
+{
+    int dma_descriptor_count = s_adc_digi_ctx->hal.desc_max_num;
+
+    for (int i = 0; i < dma_descriptor_count; i++)
+    {
+        s_adc_digi_ctx->hal.rx_desc[i].dw0.length = 0;
+        s_adc_digi_ctx->hal.rx_desc[i].dw0.owner = 1;
+    }
+
+    return ESP_OK;
+}
+
 #if SOC_GDMA_SUPPORTED
 static IRAM_ATTR bool adc_dma_in_suc_eof_callback(gdma_channel_handle_t dma_chan, gdma_event_data_t *event_data, void *user_data)
 {
