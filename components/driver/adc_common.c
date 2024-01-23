@@ -423,7 +423,7 @@ esp_err_t adc1_lock_release(void)
     SARADC1_RELEASE();
     return ESP_OK;
 }
-
+#if SOC_ADC_CALIBRATION_V1_SUPPORTED
 void bulldoze_cal(adc1_channel_t channel)
 {
     uint32_t cal_val = get_calibration_offset(ADC_NUM_1, channel) - 50;
@@ -445,17 +445,19 @@ uint32_t get_cal_offset(void)
 
     return retval;
 }
-
+#endif
 volatile uint32_t num_ch3 = 0;
 int adc1_get_offset(adc1_channel_t channel)
 {
     int adc_value;
+    uint32_t cal_val = 0;//MB UART
     ADC_CHANNEL_CHECK(ADC_NUM_1, channel);
     adc1_rtc_mode_acquire();
 
 #if SOC_ADC_CALIBRATION_V1_SUPPORTED
     // Get calibration value before going into critical section
-    uint32_t cal_val = (uint32_t)get_calibration_offset(ADC_NUM_1, channel);
+    //uint32_t
+    cal_val = (uint32_t)get_calibration_offset(ADC_NUM_1, channel);
 #endif  //SOC_ADC_CALIBRATION_V1_SUPPORTED
     adc1_lock_release();
     return (cal_val);
