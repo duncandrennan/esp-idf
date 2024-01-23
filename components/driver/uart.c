@@ -1116,7 +1116,10 @@ static void UART_ISR_ATTR uart_rx_intr_handler_default(void *param)
     }
 }
 
-extern uint8_t g_read_uart;
+extern uint8_t g_read_uart[50];
+extern int g_data_len;
+extern bool g_is_break;
+extern uint32_t g_int_status;
 extern xSemaphoreHandle xLIN_interrupt_sem;
 static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
 {
@@ -1126,7 +1129,8 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
     uint32_t uart_intr_status = 0;
     //uart_event_t uart_event;
     portBASE_TYPE HPTaskAwoken = 0;
-    static uint8_t pat_flg = 0;
+    //static uint8_t pat_flg = 0;
+    g_int_status = uart_hal_get_intsts_mask(&(uart_context[uart_num].hal));
     while (1) {
         // The `continue statement` may cause the interrupt to loop infinitely
         // we exit the interrupt here
@@ -1258,7 +1262,9 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
                 }
 #endif
                 uart_hal_read_rxfifo(&(uart_context[uart_num].hal), p_uart->rx_data_buf, &rx_fifo_len);
-                g_read_uart = p_uart->rx_data_buf[0];
+                //g_read_uart = p_uart->rx_data_buf[0];
+                memcpy(g_read_uart, p_uart->rx_data_buf, rx_fifo_len);
+                g_data_len = rx_fifo_len;
                 xSemaphoreGiveFromISR(xLIN_interrupt_sem, &HPTaskAwoken);
                 #if 0
                 uint8_t pat_chr = 0;
@@ -1364,6 +1370,7 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
         } else if (uart_intr_status & UART_INTR_BRK_DET) {
             uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_BRK_DET);
             uart_event.type = UART_BREAK;
+//#endif
         } else if (uart_intr_status & UART_INTR_FRAM_ERR) {
             UART_ENTER_CRITICAL_ISR(&uart_selectlock);
             if (p_uart->uart_select_notif_callback) {
@@ -1371,8 +1378,12 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
             }
             UART_EXIT_CRITICAL_ISR(&uart_selectlock);
             uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_FRAM_ERR);
-            uart_event.type = UART_FRAME_ERR;
-        } else if (uart_intr_status & UART_INTR_PARITY_ERR) {
+            //uart_event.type = UART_FRAME_ERR;
+            g_is_break = true;
+            xSemaphoreGiveFromISR(xLIN_interrupt_sem, &HPTaskAwoken);
+//#if 0
+        } 
+        else if (uart_intr_status & UART_INTR_PARITY_ERR) {
             UART_ENTER_CRITICAL_ISR(&uart_selectlock);
             if (p_uart->uart_select_notif_callback) {
                 p_uart->uart_select_notif_callback(uart_num, UART_SELECT_ERROR_NOTIF, &HPTaskAwoken);
