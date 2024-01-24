@@ -1121,6 +1121,8 @@ extern int g_data_len;
 extern bool g_is_break;
 extern uint32_t g_int_status;
 extern xSemaphoreHandle xLIN_interrupt_sem;
+extern QueueHandle_t g_rx_queue;
+
 static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
 {
     uart_obj_t *p_uart = (uart_obj_t *) param;
@@ -1245,7 +1247,7 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
         #endif
         if ((uart_intr_status & UART_INTR_RXFIFO_TOUT)
                    || (uart_intr_status & UART_INTR_RXFIFO_FULL)
-                   || (uart_intr_status & UART_INTR_CMD_CHAR_DET)
+                   //|| (uart_intr_status & UART_INTR_CMD_CHAR_DET)
                   ) {
 #if 0
             if (pat_flg == 1) {
@@ -1262,11 +1264,21 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
                 }
 #endif
                 uart_hal_read_rxfifo(&(uart_context[uart_num].hal), p_uart->rx_data_buf, &rx_fifo_len);
+                //uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_TOUT | UART_INTR_RXFIFO_FULL);
+                uint32_t data;
+                for (int i = 0; i < rx_fifo_len; i++)
+                {
+                    data = (uint32_t)(rx_fifo_len << 28 | uart_hal_get_intsts_mask(&(uart_context[uart_num].hal))) << 8 | p_uart->rx_data_buf[i];
+                    uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), 0x7FFFF);
+                    xQueueSendFromISR(g_rx_queue, (void * )&data, &HPTaskAwoken);
+                }
                 //g_read_uart = p_uart->rx_data_buf[0];
+#if 0
                 memcpy(g_read_uart, p_uart->rx_data_buf, rx_fifo_len);
                 g_data_len = rx_fifo_len;
                 xSemaphoreGiveFromISR(xLIN_interrupt_sem, &HPTaskAwoken);
-                #if 0
+#endif
+#if 0
                 uint8_t pat_chr = 0;
                 uint8_t pat_num = 0;
                 int pat_idx = -1;
@@ -1279,10 +1291,10 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
                     uart_event.size = rx_fifo_len;
                     pat_idx = uart_find_pattern_from_last(p_uart->rx_data_buf, rx_fifo_len - 1, pat_chr, pat_num);
                 } else {
-                    #endif
-                    //After Copying the Data From FIFO ,Clear intr_status
-                    uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_TOUT | UART_INTR_RXFIFO_FULL);
-                    #if 0
+#endif
+                // After Copying the Data From FIFO ,Clear intr_status
+                ////uart_hal_clr_intsts_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_TOUT | UART_INTR_RXFIFO_FULL);
+#if 0
                     uart_event.type = UART_DATA;
                     uart_event.size = rx_fifo_len;
                     uart_event.timeout_flag = (uart_intr_status & UART_INTR_RXFIFO_TOUT) ? true : false;
@@ -1293,8 +1305,8 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
                     UART_EXIT_CRITICAL_ISR(&uart_selectlock);
                     
                 }
-                #endif
-                #if 0
+#endif
+#if 0
                 p_uart->rx_stash_len = rx_fifo_len;
                 //If we fail to push data to ring buffer, we will have to stash the data, and send next time.
                 //Mainly for applications that uses flow control or small ring buffer.
@@ -2034,9 +2046,9 @@ esp_err_t uart_driver_install_lin(uart_port_t uart_num, int rx_buffer_size, int 
     }
 
     uart_intr_config_t uart_intr = {
-        .intr_enable_mask = UART_INTR_CONFIG_FLAG,
-        .rxfifo_full_thresh = UART_FULL_THRESH_DEFAULT,
-        .rx_timeout_thresh = UART_TOUT_THRESH_DEFAULT,
+        .intr_enable_mask = UART_INTR_RXFIFO_FULL | UART_INTR_BRK_DET,//UART_INTR_CONFIG_FLAG, | UART_INTR_RXFIFO_TOUT
+        .rxfifo_full_thresh = 1,//UART_FULL_THRESH_DEFAULT,
+        .rx_timeout_thresh = 0,//UART_TOUT_THRESH_DEFAULT,
         .txfifo_empty_intr_thresh = UART_EMPTY_THRESH_DEFAULT,
     };
     uart_module_enable(uart_num);
