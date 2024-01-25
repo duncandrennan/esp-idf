@@ -1147,8 +1147,10 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
                    || (uart_intr_status & UART_INTR_BRK_DET)
                    || (uart_intr_status & UART_INTR_FRAM_ERR)
                   ) {
+#if 0
             if (p_uart->rx_buffer_full_flg == false)
             {
+#endif
                 rx_fifo_len = uart_hal_get_rxfifo_len(&(uart_context[uart_num].hal));
 #if 0
                 if ((p_uart_obj[uart_num]->rx_always_timeout_flg) && !(uart_intr_status & UART_INTR_RXFIFO_TOUT)) {
@@ -1245,7 +1247,9 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
                     UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
                 }
 #endif
+#if 0
             }
+#endif
 #if 0
             else {
                 UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
