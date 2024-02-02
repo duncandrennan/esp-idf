@@ -1116,11 +1116,8 @@ static void UART_ISR_ATTR uart_rx_intr_handler_default(void *param)
     }
 }
 
-extern uint8_t g_read_uart[50];
-extern int g_data_len;
+extern uint8_t g_read_uart;
 extern bool g_is_break;
-extern uint32_t g_int_status;
-extern xSemaphoreHandle xLIN_interrupt_sem;
 extern QueueHandle_t g_rx_queue;
 
 static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
@@ -1132,7 +1129,6 @@ static void UART_ISR_ATTR uart_rx_intr_handler_lin(void *param)
     //uart_event_t uart_event;
     portBASE_TYPE HPTaskAwoken = 0;
     //static uint8_t pat_flg = 0;
-    g_int_status = uart_hal_get_intsts_mask(&(uart_context[uart_num].hal));
     while (1) {
         // The `continue statement` may cause the interrupt to loop infinitely
         // we exit the interrupt here
