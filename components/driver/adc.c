@@ -345,6 +345,7 @@ static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 #endif
 
 extern QueueHandle_t g_adc_data_queue;
+dma_descriptor_t g_descriptor;
 
 static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
 {
@@ -352,12 +353,15 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
     dma_descriptor_t *current_desc = (dma_descriptor_t *)adc_digi_ctx->rx_eof_desc_addr;
 
     adc_hal_digi_suspend(&adc_digi_ctx->hal);
-
+    //  copy descriptor and set owner now
+    memcpy(&g_descriptor, &current_desc, sizeof(g_descriptor));
+    current_desc->dw0.length = 0;
+    current_desc->dw0.owner = 1;
     // Advance the DMA descriptor pointer
     // The next sample will use "cur_desc_ptr"
     adc_digi_ctx->hal.cur_desc_ptr = adc_digi_ctx->hal.cur_desc_ptr->next;
 
-    xQueueSendToBackFromISR(g_adc_data_queue, &current_desc, &taskAwoken);
+    xQueueSendToBackFromISR(g_adc_data_queue, &g_descriptor, &taskAwoken);//current_desc
 
     return (taskAwoken == pdTRUE);
 }
