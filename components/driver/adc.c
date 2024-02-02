@@ -297,6 +297,11 @@ cleanup:
     return ret;
 }
 
+esp_err_t gdma_reset_adc(void)
+{
+    return  gdma_reset(s_adc_digi_ctx->rx_dma_channel);
+}
+
 esp_err_t adc_digi_dma_reset_descriptors(void)
 {
     int dma_descriptor_count = s_adc_digi_ctx->hal.desc_max_num;
