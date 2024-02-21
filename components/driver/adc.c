@@ -347,6 +347,11 @@ static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 extern QueueHandle_t g_adc_data_queue;
 dma_descriptor_t g_descriptor;
 
+IRAM_ATTR void adc_digi_suspend(void)
+{
+    adc_hal_digi_suspend(&s_adc_digi_ctx->hal);
+}
+
 static IRAM_ATTR bool s_adc_dma_intr(adc_digi_context_t *adc_digi_ctx)
 {
     portBASE_TYPE taskAwoken = 0;
